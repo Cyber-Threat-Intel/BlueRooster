@@ -26,7 +26,7 @@ I would like to thank Aleprada for their script "ioc_tweets", as this was the ma
 ### **How it Works**
 1. You will need to add in your bearer token
   * See further details about the different authentication methods on Twitter's dev page [Twitter Authentication](https://developer.twitter.com/en/docs/authentication/overview)
-[EDITING] 2. You will need to add every Twitter Account username/handle within the "TwitterAccounts.txt" file.
+ * [EDITING] 2. You will need to add every Twitter Account username/handle within the "TwitterAccounts.txt" file.
 
 '''
 bearer_token = "your_bearer_token"
