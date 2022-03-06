@@ -1,2 +1,1 @@
-pymisp==2.4.143
-tweepy==3.10.0
+tweepy==4.6.0
