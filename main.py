@@ -1,18 +1,21 @@
-#!/usr/bin/env python
-from pymisp import PyMISP,MISPEvent, PyMISPError
-from tweepy import OAuthHandler
+#!/usr/bin/env python3
+#================================================================
+from datetime import datetime
 from time import sleep
-from datetime import date
 import configparser
-import argparse
 import tweepy
 import os
+import re
+#================================================================
 
+ioc_list = []
+
+#----------------------------------------------------------------
 
 def config_parser(section, key):
-    config = configparser.ConfigParser()
+    config = configparser.ConfigParser(interpolation=None)
     try:
-        config.read(os.path.join(os.path.dirname(__file__)+"/config/config.ini"))
+        config.read(os.path.join(os.path.dirname(__file__) + "/config/config.ini"))
         result = config.get(section, key)
         return result
     except config.NoOptionError:
@@ -20,141 +23,81 @@ def config_parser(section, key):
     except config.NoSectionError:
         raise Exception("There was a problem with configuration file. The key does not exist.")
 
-
-def load_file(filename):
-    with open(os.path.dirname(__file__)+"/config/"+filename, "r") as ins:
-        array = []
-        for line in ins:
-            array.append(line.strip())
-        ins.close()
-    return array
-
-
-def misp_connection(url, misp_key, proxy_usage):
-    try:
-        if proxy_usage:
-            proxies = {}
-            proxies ["http"] = config_parser("misp","http")
-            proxies ["https"] = config_parser("misp","https")
-            misp = PyMISP(url, misp_key, False, 'json', proxies=proxies)
-        else:
-            misp = PyMISP(url, misp_key, False, 'json',None)
-    except PyMISPError:
-        print("\t [!] Error connecting to MISP instance. Check if your MISP instance it's up!")
-        return None
-
-    return misp
-
-
-def create_event(misp):
-    event = MISPEvent()
-    event.distribution = 0
-    event.threat_level_id = 1
-    event.analysis = 0
-    return event
-
-
-def send2misp(tweet, proxy_usage):
-    url = config_parser("misp", "url")
-    api_key = config_parser("misp", "api_key")
-    misp = misp_connection(url, api_key, proxy_usage)
-    event = create_event(misp)
-    event.add_tag("tweet-ioc")
-    event.info = "[Tweet] New IoCs discovered on Twitter"
-    event.add_attribute('twitter-id', tweet.user.screen_name)
-    event.add_attribute('other', tweet.full_text)
-    event.add_attribute('other', tweet.created_at.strftime("%Y-%m-%dT%H:%M:%S"))
-    event.add_attribute('link', "https://twitter.com/"+tweet.user.screen_name+"/status/"+tweet.id_str)
-    if 'hashtags' in tweet.entities:
-        for h in tweet.entities['hashtags']:
-            event.add_attribute('other', h['text'])
-    if 'urls' in tweet.entities:
-        for h in tweet.entities['urls']:
-            event.add_attribute('link', h['url'])
-    event = misp.add_event(event, pythonify=True)
-    print("\t [*] Event with ID " + str(event.id) + " has been successfully stored.")
-
+#----------------------------------------------------------------
 
 def init_twitter_config():
-    consumer_key = config_parser('twitter_api', 'consumer_key')
-    consumer_secret = config_parser('twitter_api', 'consumer_secret')
-    access_token = config_parser('twitter_api', 'access_token')
-    access_secret = config_parser('twitter_api', 'access_secret')
-    auth = OAuthHandler(consumer_key, consumer_secret)
-    auth.set_access_token(access_token, access_secret)
+    bearer_token = config_parser('twitter_api', 'bearer_token')
+    auth = tweepy.Client(bearer_token)
     return auth
 
+#----------------------------------------------------------------
 
-def filter_tweets(tweet_str):
-    alert = False
-    filters = load_file("filters.txt")
-    for f in filters:
-        if f.lower() in tweet_str.lower():
-            alert = True
-            break
-    return alert
+def load_accounts_file(accounts_filename):
+    with open(os.path.dirname(__file__) + "/config/" + accounts_filename, "r") as account_list:
+        array = []
+        for line in account_list:
+            handle = line.replace('@', '')
+            array.append(handle.strip())
+        account_list.close()
+    return array
 
+#----------------------------------------------------------------
 
-def print_tweet(tweet):
-    print("\t[!] Tweet by " + tweet.user.screen_name + " on " + str(tweet.created_at) + ":")
-    if 'hashtags' in tweet.entities:
-        for h in tweet.entities['hashtags']:
-            print("\t[!] #"+h['text'])
-    if 'urls' in tweet.entities:
-        for h in tweet.entities['urls']:
-            print("\t[!] url: " + h['url'])
-    print("\t[!]Tweet content:")
-    print("\t\t" + tweet.full_text.replace("\n", "\n\t\t"))
+def ioc_union(ioc_list):
+    sleep(1)
+    union_iocs = list(set().union(*ioc_list))
+    union_iocs = [brack.replace('[', '') for brack in union_iocs]
+    union_iocs = [brack.replace(']', '') for brack in union_iocs]
+    union_iocs.sort(key=lambda item: (len(item), item))
+    with open(os.path.dirname(__file__) + "/config/" + "Aggregated_IOCs.txt", "r+") as ioc_file:
+        ioc_file.write(str(union_iocs))
+    print(union_iocs)
 
+#----------------------------------------------------------------
 
-def search_on_twitter(api, alerts):
+def grab_iocs(tweet):
+    single_tweet = str(tweet)
+    hash_iocs = re.findall(r'([0-9a-fA-F]{32}|[0-9a-fA-F]{40}|[0-9a-fA-F]{64})', single_tweet)
+    ipv4_iocs = re.findall(r'(\d{1,3}[\[\]\.]+\d{1,3}[\[\]\.]+\d{1,3}[\[\]\.]+\d{1,3})', single_tweet)
+    ioc_list.append(hash_iocs)
+    ioc_list.append(ipv4_iocs)
+
+#----------------------------------------------------------------
+
+def search_on_twitter(client):
+    n = 0
+    sleep(1)
     tweets_list = []
-    keywords = load_file("keywords.txt")
-    today = date.today()
-    for k in keywords:
-        sleep(5)
-        print("[+] Tweet containing: " + k)
-        tweets = tweepy.Cursor(api.search, q=k, lang="en", since=today, tweet_mode = "extended").items(300)
-        if alerts:
-            for tweet in tweets:
-                if filter_tweets(tweet.full_text):
-                    print_tweet(tweet)
-                    tweets_list.append(tweet)
-        else:
-            for tweet in tweets:
-                print_tweet(tweet)
-                tweets_list.append(tweet)
-    print("[*] Number of tweets gathered: " + str(len(tweets_list)))
-    return tweets_list
+    twitter_accounts_list = load_accounts_file("TwitterAccounts.txt")
+    twitter_accounts_details = client.get_users(usernames=twitter_accounts_list)
+    twitter_accounts = str(twitter_accounts_details[0])
+    today = datetime.today()
+    past_hour = (today.hour - 1)
+    past_day = (today.day - 1)
+    daily_search_period = str((datetime(year=today.year, month=today.month, day=past_day, hour=past_hour, second=0)).isoformat() + "Z")
+    sleep(1)
+    print("\t[+] Gathering Tweets Starting From: " + daily_search_period)
+    account_names = re.findall(r'(?: username=)(\w+)', twitter_accounts)
+    account_ids = re.findall(r'(?:User id=)(\d+)', twitter_accounts)
+    for account_id in account_ids:
+        sleep(1)
+        print("\t\t[+] Twitter Account Handle: @" + account_names[n])
+        n += 1
+        tweets = tweepy.Paginator(client.get_users_tweets, id=account_id, start_time=daily_search_period, max_results=100).flatten()
+        for tweet in tweets:
+            grab_iocs(tweet)
 
+#----------------------------------------------------------------
 
 def start_listen_twitter():
-    auth = init_twitter_config()
-    api = tweepy.API(auth, wait_on_rate_limit=True)
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-a", "--alerts", help=" Filter tweets gathered in case of a match with any "
-                                               "keywords of your list.",
-                                               action="store_true")
-    parser.add_argument("-m", "--misp", help="Send IoCs from Twitter to MISP", action="store_true")
-    parser.add_argument("-p", "--proxy", help="Set a proxy for sending the alert to your MISP instance..",
-                        action="store_true")
-    args = parser.parse_args()
-    proxy_usage = False
-    print("[*] Searching IoC's on Twitter:")
+    client = init_twitter_config()
+    print("[*] ____ Starting Script ____")
+    search_on_twitter(client)
+    ioc_union(ioc_list)
 
-    if args.alerts:
-        print("[*] Checking if the tweets gathered contain any keyword from your list.")
-        tweets = search_on_twitter(api, True)
-        if args.misp:
-            if args.proxy:
-                proxy_usage = True
-            print("[*] Sending alerts to MISP")
-            for t in tweets:
-                send2misp(t, proxy_usage)
-    else:
-        search_on_twitter(api, False)
-
+#----------------------------------------------------------------
 
 if __name__ == '__main__':
     start_listen_twitter()
 
+#----------------------------------------------------------------
