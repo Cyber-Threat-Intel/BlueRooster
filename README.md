@@ -25,7 +25,7 @@ I would like to thank Aleprada for their script "ioc_tweets", as this was the ma
 
 ### **How it Works**
 1. You will need to add in your bearer token in the file "config.ini" file.
-  * bearer_token = your_bearer_token  ()no need for single or double quotes, just replace the term **your_bearer_token** with your Twitter Dev token_).
+  * bearer_token = your_bearer_token  (_no need for single or double quotes, just replace the term **your_bearer_token** with your Twitter Dev token_).
   * See further details about the different authentication methods on Twitter's dev page [Twitter Authentication](https://developer.twitter.com/en/docs/authentication/overview)
 2. You will need to add every Twitter Account username/handle within the "TwitterAccounts.txt" file that you want to search for IOCs for.
 
