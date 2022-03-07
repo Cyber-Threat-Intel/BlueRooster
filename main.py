@@ -1,3 +1,4 @@
+#================================================================
 #!/usr/bin/env python3
 from datetime import datetime
 from time import sleep
@@ -5,14 +6,14 @@ import configparser
 import tweepy
 import os
 import re
-
+#================================================================
 
 ioc_list = []
 
+#----------------------------------------------------------------
 
-'''
 def config_parser(section, key):
-    config = configparser.ConfigParser()
+    config = configparser.ConfigParser(interpolation=None)
     try:
         config.read(os.path.join(os.path.dirname(__file__) + "/config/config.ini"))
         result = config.get(section, key)
@@ -22,32 +23,17 @@ def config_parser(section, key):
     except config.NoSectionError:
         raise Exception("There was a problem with configuration file. The key does not exist.")
 
+#----------------------------------------------------------------
 
 def init_twitter_config():
     bearer_token = config_parser('twitter_api', 'bearer_token')
     auth = tweepy.Client(bearer_token)
     return auth
 
-    
-def load_accounts_file(accounts_filename):
-    with open(full_directory + accounts_filename, "r") as account_list:
-    #with open(os.path.dirname(__file__) + "/config/" + accounts_filename, "r") as ins:
-        array = []
-        for line in account_list:
-            handle = line.replace('@', '')
-            array.append(handle.strip())
-        account_list.close()
-    return array
-'''
+#----------------------------------------------------------------
 
-def init_twitter_config():
-    bearer_token = 'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX'
-    auth = tweepy.Client(bearer_token)
-    return auth
-    
-    
 def load_accounts_file(accounts_filename):
-    with open("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" + accounts_filename, "r") as account_list:
+    with open(os.path.dirname(__file__) + "/config/" + accounts_filename, "r") as account_list:
         array = []
         for line in account_list:
             handle = line.replace('@', '')
@@ -55,6 +41,7 @@ def load_accounts_file(accounts_filename):
         account_list.close()
     return array
 
+#----------------------------------------------------------------
 
 def ioc_union(ioc_list):
     sleep(1)
@@ -62,11 +49,11 @@ def ioc_union(ioc_list):
     union_iocs = [brack.replace('[', '') for brack in union_iocs]
     union_iocs = [brack.replace(']', '') for brack in union_iocs]
     union_iocs.sort(key=lambda item: (len(item), item))
-    #with open(os.path.dirname(__file__) + "/config/" + "Aggregated_IOCs.txt", "r") as ioc_file:
-    with open("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" + "Aggregated_IOCs.txt", "r+") as ioc_file:
+    with open(os.path.dirname(__file__) + "/config/" + "Aggregated_IOCs.txt", "r+") as ioc_file:
         ioc_file.write(str(union_iocs))
     print(union_iocs)
-    
+
+#----------------------------------------------------------------
 
 def grab_iocs(tweet):
     single_tweet = str(tweet)
@@ -75,6 +62,7 @@ def grab_iocs(tweet):
     ioc_list.append(hash_iocs)
     ioc_list.append(ipv4_iocs)
 
+#----------------------------------------------------------------
 
 def search_on_twitter(client):
     n = 0
@@ -95,10 +83,11 @@ def search_on_twitter(client):
         sleep(1)
         print("\t\t[+] Twitter Account Handle: @" + account_names[n])
         n += 1
-        tweets = tweepy.Paginator(client.get_users_tweets, id=account_id, start_time=daily_search_period, max_results=5).flatten()
+        tweets = tweepy.Paginator(client.get_users_tweets, id=account_id, start_time=daily_search_period, max_results=100).flatten()
         for tweet in tweets:
             grab_iocs(tweet)
 
+#----------------------------------------------------------------
 
 def start_listen_twitter():
     client = init_twitter_config()
@@ -106,6 +95,9 @@ def start_listen_twitter():
     search_on_twitter(client)
     ioc_union(ioc_list)
 
+#----------------------------------------------------------------
 
 if __name__ == '__main__':
     start_listen_twitter()
+
+#----------------------------------------------------------------
